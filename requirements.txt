@@ -1,0 +1,4 @@
+asr-decoder
+torch<=2.3
+modelscope
+funasr
