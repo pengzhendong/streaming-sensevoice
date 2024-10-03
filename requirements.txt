@@ -1,4 +1,8 @@
 asr-decoder
-torch<=2.3
-modelscope
 funasr
+modelscope
+online-fbank
+pysilero
+sounddevice
+soundfile
+torch<=2.3

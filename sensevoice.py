@@ -722,7 +722,7 @@ class SenseVoiceSmall(nn.Module):
             torch.LongTensor([[self.textnorm_dict["woitn"]]]).to(speech.device)
         ).repeat(speech.size(0), 1, 1)
         language_query = self.embed(
-            torch.LongTensor([[self.lid_dict["auto"]]]).to(speech.device)
+            torch.LongTensor([[self.lid_dict["zh"]]]).to(speech.device)
         ).repeat(speech.size(0), 1, 1)
         event_emo_query = self.embed(
             torch.LongTensor([[1, 2]]).to(speech.device)
@@ -734,6 +734,7 @@ class SenseVoiceSmall(nn.Module):
 
         encoder_out, _ = self.encoder(speech, speech_lengths)
         return self.ctc.log_softmax(encoder_out)[0, 4:]
+
 
 def from_pretrained():
     repo_dir = snapshot_download("iic/SenseVoiceSmall")
