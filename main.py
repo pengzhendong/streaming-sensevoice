@@ -46,7 +46,9 @@ for i in range(0, len(samples), step):
             continue
         if (idx - padding) % chunk_size != 0 and not is_last:
             continue
-        x = model.inference(chunk_feats)[padding : padding + chunk_size]
+        x = model.inference(chunk_feats)[padding:]
+        if not is_last:
+            x = x[:chunk_size]
         res = decoder.ctc_prefix_beam_search(x, beam_size=3, is_last=is_last)
         print("timestamps:", [i * 60 / 1000 for i in res["times"][0]])
         print("text:", model.tokenizer.decode(res["tokens"][0]))
