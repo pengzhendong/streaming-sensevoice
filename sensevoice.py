@@ -716,7 +716,7 @@ class SenseVoiceSmall(nn.Module):
 
     def inference(self, speech):
         speech = speech[None, :, :]
-        speech_lengths = torch.tensor([speech.shape[1]])
+        speech_lengths = torch.tensor([speech.shape[1]]).to(speech.device)
 
         textnorm_query = self.embed(
             torch.LongTensor([[self.textnorm_dict["woitn"]]]).to(speech.device)
