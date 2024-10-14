@@ -21,15 +21,23 @@ from online_fbank import OnlineFbank
 from sensevoice import from_pretrained
 
 
-model = from_pretrained()
+def get_size(cur_idx, chunk_size, padding):
+    effective_size = cur_idx + 1 - padding
+    if effective_size <= 0:
+        return 0
+    return effective_size % chunk_size or chunk_size
+
+
+device = "mps"
+model = from_pretrained(device)
 samples, sr = sf.read("test_16k.wav")
-samples = (samples * 32768).tolist()
+samples = (samples * 32768).tolist() * 3
 fbank = OnlineFbank(window_type="hamming")
 decoder = CTCDecoder("contexts.txt", model.symbol_table, model.bpemodel)
 
 chunk_size = 10
 padding = 8
-idx = 0
+idx = -1
 step = int(0.1 * sr)
 chunk_feats = torch.zeros((chunk_size + 2 * padding, 560))
 for i in range(0, len(samples), step):
@@ -39,14 +47,15 @@ for i in range(0, len(samples), step):
     if feats is None:
         continue
     for feat in torch.unbind(torch.tensor(feats), dim=0):
-        idx += 1
         chunk_feats = torch.roll(chunk_feats, -1, dims=0)
         chunk_feats[-1, :] = feat
-        if idx < chunk_size + padding:
-            continue
-        if (idx - padding) % chunk_size != 0 and not is_last:
+        idx += 1
+        cur_size = get_size(idx, chunk_size, padding)
+        if cur_size != chunk_size and not is_last:
             continue
         x = model.inference(chunk_feats)[padding:]
+        if cur_size != chunk_size:
+            x = x[chunk_size - cur_size:]
         if not is_last:
             x = x[:chunk_size]
         res = decoder.ctc_prefix_beam_search(x, beam_size=3, is_last=is_last)

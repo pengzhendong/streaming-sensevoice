@@ -22,8 +22,9 @@ from pysilero import VADIterator
 from sensevoice import from_pretrained
 
 
-model = from_pretrained()
-vad_iterator = VADIterator(denoise=True)
+device = "mps"
+model = from_pretrained(device)
+vad_iterator = VADIterator()
 decoder = CTCDecoder("contexts.txt", model.symbol_table, model.bpemodel)
 devices = sd.query_devices()
 if len(devices) == 0:
@@ -45,7 +46,6 @@ with sd.InputStream(channels=1, dtype="float32", samplerate=16000) as s:
             fbank.accept_waveform(speech_samples.tolist(), is_last)
             if not is_last:
                 continue
-
             feats = fbank.get_lfr_frames(
                 neg_mean=model.neg_mean, inv_stddev=model.inv_stddev
             )

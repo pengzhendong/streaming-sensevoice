@@ -716,16 +716,18 @@ class SenseVoiceSmall(nn.Module):
 
     def inference(self, speech):
         speech = speech[None, :, :]
-        speech_lengths = torch.tensor([speech.shape[1]]).to(speech.device)
+        speech_lengths = torch.tensor([speech.shape[1]])
+        speech = speech.to(self.device)
+        speech_lengths = speech_lengths.to(self.device)
 
         textnorm_query = self.embed(
-            torch.LongTensor([[self.textnorm_dict["woitn"]]]).to(speech.device)
+            torch.LongTensor([[self.textnorm_dict["woitn"]]]).to(self.device)
         ).repeat(speech.size(0), 1, 1)
         language_query = self.embed(
-            torch.LongTensor([[self.lid_dict["zh"]]]).to(speech.device)
+            torch.LongTensor([[self.lid_dict["zh"]]]).to(self.device)
         ).repeat(speech.size(0), 1, 1)
         event_emo_query = self.embed(
-            torch.LongTensor([[1, 2]]).to(speech.device)
+            torch.LongTensor([[1, 2]]).to(self.device)
         ).repeat(speech.size(0), 1, 1)
         speech = torch.cat(
             (language_query, event_emo_query, textnorm_query, speech), dim=1
@@ -736,9 +738,10 @@ class SenseVoiceSmall(nn.Module):
         return self.ctc.log_softmax(encoder_out)[0, 4:]
 
 
-def from_pretrained():
+def from_pretrained(device="cpu"):
     repo_dir = snapshot_download("iic/SenseVoiceSmall")
     model, kwargs = AutoModel.build_model(model=repo_dir)
+    model = model.to(device)
     model.encoder.eval()
     cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
     neg_mean, inv_stddev = cmvn[0, :], cmvn[1, :]
@@ -747,6 +750,7 @@ def from_pretrained():
     symbol_table = {}
     for i in range(tokenizer.get_vocab_size()):
         symbol_table[tokenizer.decode(i)] = i
+    model.device = device
     model.tokenizer = tokenizer
     model.bpemodel = bpemodel
     model.symbol_table = symbol_table
