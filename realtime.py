@@ -22,6 +22,13 @@ from pysilero import VADIterator
 from sensevoice import from_pretrained
 
 
+def get_size(cur_idx, chunk_size, padding):
+    effective_size = cur_idx + 1 - padding
+    if effective_size <= 0:
+        return 0
+    return effective_size % chunk_size or chunk_size
+
+
 device = "mps"
 model = from_pretrained(device)
 vad_iterator = VADIterator()
@@ -40,18 +47,31 @@ with sd.InputStream(channels=1, dtype="float32", samplerate=16000) as s:
         samples, _ = s.read(samples_per_read)
         for speech_dict, speech_samples in vad_iterator(samples[:, 0]):
             if "start" in speech_dict:
+                chunk_size = 10
+                padding = 8
+                chunk_feats = torch.zeros((chunk_size + 2 * padding, 560))
+                idx = -1
                 decoder.reset()
                 fbank = OnlineFbank(window_type="hamming")
             is_last = "end" in speech_dict
             fbank.accept_waveform(speech_samples.tolist(), is_last)
-            if not is_last:
-                continue
             feats = fbank.get_lfr_frames(
                 neg_mean=model.neg_mean, inv_stddev=model.inv_stddev
             )
             if feats is None:
                 continue
-            x = model.inference(torch.tensor(feats))
-            res = decoder.ctc_prefix_beam_search(x, beam_size=3, is_last=True)
-            if len(res["tokens"][0]) > 0:
+            for feat in torch.unbind(torch.tensor(feats), dim=0):
+                chunk_feats = torch.roll(chunk_feats, -1, dims=0)
+                chunk_feats[-1, :] = feat
+                idx += 1
+                cur_size = get_size(idx, chunk_size, padding)
+                if cur_size != chunk_size and not is_last:
+                    continue
+                x = model.inference(chunk_feats)[padding:]
+                if cur_size != chunk_size:
+                    x = x[chunk_size - cur_size:]
+                if not is_last:
+                    x = x[:chunk_size]
+                res = decoder.ctc_prefix_beam_search(x, beam_size=3, is_last=is_last)
+                print("timestamps:", [i * 60 / 1000 for i in res["times"][0]])
                 print("text:", model.tokenizer.decode(res["tokens"][0]))
