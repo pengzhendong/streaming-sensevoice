@@ -73,5 +73,5 @@ with sd.InputStream(channels=1, dtype="float32", samplerate=16000) as s:
                 if not is_last:
                     x = x[:chunk_size]
                 res = decoder.ctc_prefix_beam_search(x, beam_size=3, is_last=is_last)
-                print("timestamps:", [i * 60 / 1000 for i in res["times"][0]])
+                print("timestamps(ms):", [i * 60 for i in res["times"][0]])
                 print("text:", model.tokenizer.decode(res["tokens"][0]))
