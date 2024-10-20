@@ -1,6 +1,5 @@
 asr-decoder
 funasr
-modelscope
 online-fbank
 pysilero
 sounddevice

@@ -1,5 +1,7 @@
 # streaming-sensevoice
 
+Streaming SenseVoice processes inference in chunks of [SenseVoice](https://github.com/FunAudioLLM/SenseVoice).
+
 ## Usage
 
 - transcribe wav file
