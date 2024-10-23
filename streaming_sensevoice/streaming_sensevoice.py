@@ -32,8 +32,9 @@ class StreamingSenseVoice:
         beam_size: int = 3,
         contexts: List[str] = None,
         device: str = "cpu",
+        model: str = "iic/SenseVoiceSmall",
     ):
-        model, kwargs = SenseVoiceSmall.from_pretrained(model="iic/SenseVoiceSmall")
+        model, kwargs = SenseVoiceSmall.from_pretrained(model=model)
         model = model.to(device)
         model.eval()
         self.device = device
