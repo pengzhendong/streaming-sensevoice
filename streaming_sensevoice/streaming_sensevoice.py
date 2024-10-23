@@ -108,8 +108,6 @@ class StreamingSenseVoice:
         features = self.fbank.get_lfr_frames(
             neg_mean=self.neg_mean, inv_stddev=self.inv_stddev
         )
-        if features is None:
-            return None
         for feature in torch.unbind(torch.tensor(features), dim=0):
             self.caches = torch.roll(self.caches, -1, dims=0)
             self.caches[-1, :] = feature
