@@ -24,6 +24,9 @@ from online_fbank import OnlineFbank
 from .sensevoice import SenseVoiceSmall
 
 
+sensevoice_models = {}
+
+
 class StreamingSenseVoice:
     def __init__(
         self,
@@ -34,11 +37,14 @@ class StreamingSenseVoice:
         device: str = "cpu",
         model: str = "iic/SenseVoiceSmall",
     ):
-        model, kwargs = SenseVoiceSmall.from_pretrained(model=model)
-        model = model.to(device)
-        model.eval()
         self.device = device
-        self.model = model
+        key = f"{model}-{device}"
+        if key not in sensevoice_models:
+            model, kwargs = SenseVoiceSmall.from_pretrained(model=model)
+            model = model.to(device)
+            model.eval()
+            sensevoice_models[key] = (model, kwargs)
+        self.model, kwargs = sensevoice_models[key]
         # features
         cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
         self.neg_mean, self.inv_stddev = cmvn[0, :], cmvn[1, :]
