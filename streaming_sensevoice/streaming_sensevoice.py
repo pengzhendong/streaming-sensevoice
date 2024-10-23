@@ -38,13 +38,7 @@ class StreamingSenseVoice:
         model: str = "iic/SenseVoiceSmall",
     ):
         self.device = device
-        key = f"{model}-{device}"
-        if key not in sensevoice_models:
-            model, kwargs = SenseVoiceSmall.from_pretrained(model=model)
-            model = model.to(device)
-            model.eval()
-            sensevoice_models[key] = (model, kwargs)
-        self.model, kwargs = sensevoice_models[key]
+        self.model, kwargs = self.load_model(model=model, device=device)
         # features
         cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
         self.neg_mean, self.inv_stddev = cmvn[0, :], cmvn[1, :]
@@ -67,6 +61,16 @@ class StreamingSenseVoice:
         self.cur_idx = -1
         self.caches_shape = (chunk_size + 2 * padding, kwargs["input_size"])
         self.caches = torch.zeros(self.caches_shape)
+
+    @staticmethod
+    def load_model(model: str, device: str) -> tuple:
+        key = f"{model}-{device}"
+        if key not in sensevoice_models:
+            model, kwargs = SenseVoiceSmall.from_pretrained(model=model, device=device)
+            model = model.to(device)
+            model.eval()
+            sensevoice_models[key] = (model, kwargs)
+        return sensevoice_models[key]
 
     def reset(self):
         self.cur_idx = -1
