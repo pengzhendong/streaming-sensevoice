@@ -20,7 +20,7 @@ $ python realtime.py
 
 - transcribe from websocket
 
-A basic WebSocket service built with `Record.JS` and `FastAPI`; the frontend uses `MP3` format to transmit audio information to reduce latency and increase stability.
+A basic WebSocket service built with [`Recorder`](https://github.com/xiangyuecn/Recorder) and `FastAPI`; the frontend uses `MP3` format to transmit audio information to reduce latency and increase stability.
 
 ```bash
 pip install -r requirements-ws-demo.txt
