@@ -6,7 +6,7 @@ Streaming SenseVoice processes inference in chunks of [SenseVoice](https://githu
 
 - transcribe wav file
 
-``` bash
+```bash
 $ python main.py
 ```
 
@@ -14,6 +14,18 @@ $ python main.py
 
 - transcribe from microphone
 
-``` bash
+```bash
 $ python realtime.py
+```
+
+- transcribe from websocket
+
+A basic WebSocket service built with `Record.JS` and `FastAPI`; the frontend uses `MP3` format to transmit audio information to reduce latency and increase stability.
+
+```bash
+pip install -r requirements-ws-demo.txt
+python realtime_ws_server_demo.py
+
+# check cli options
+python realtime_ws_server_demo.py --help
 ```
