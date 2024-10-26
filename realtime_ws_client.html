@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebSocket Audio Transcription</title>
+    <style>
+      body {
+        user-select: none;
+      }
+      #transcriptionResult {
+        white-space: pre-wrap;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+
+        font-family: monospace;
+        margin-bottom: 84px;
+
+        min-height: 40px;
+      }
+      #recordButton {
+        border-radius: 10px;
+        border: none;
+        background-color: #e0e0e0;
+        padding: 5px 10px;
+      }
+      #recordButton.recording {
+        background-color: red;
+        color: white;
+      }
+      div#transcriptionResult > div {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        padding: 3px 5px;
+        margin: 5px;
+        gap: 3px;
+      }
+
+      .transTime {
+        grid-column-start: 2;
+        display: flex;
+        grid-column-end: 3;
+        grid-row-start: 2;
+        grid-row-end: 2;
+        padding: 0px 5px;
+        color: #757575;
+        font-size: 12px;
+      }
+
+      .transId {
+        padding: 2px;
+        border-radius: 10px;
+        background-color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .transContent {
+        padding: 3px;
+        font-weight: 600;
+        user-select: auto;
+      }
+
+      div#VADBox {
+        position: fixed;
+        width: 64px;
+        height: 64px;
+        border-radius: 100px;
+        box-shadow: 2px 2px 6px #e0e0e0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        top: 20px;
+        right: 20px;
+        background-color: white;
+      }
+
+      @media screen and (max-width: 600px) {
+        div#VADBox {
+          top: unset;
+          bottom: 10px;
+          right: calc(50% - 32px);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <button id="recordButton">Start Recording</button>
+      <hr />
+      Transcription result will be displayed below:
+      <div id="transcriptionResult"></div>
+      <div id="VADBox">
+        <svg
+          t="1729797715045"
+          class="icon"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          p-id="1395"
+          width="32"
+          height="32"
+          id="MicrophoneWait"
+        >
+          <path
+            d="M393.846154 301.948718m-301.948718 0a301.948718 301.948718 0 1 0 603.897436 0 301.948718 301.948718 0 1 0-603.897436 0Z"
+            fill="#8CF6FB"
+            p-id="1396"
+          ></path>
+          <path
+            d="M932.102564 420.102564c0 216.615385-165.415385 397.784615-380.717949 418.789744l-65.641025 1.31282C263.876923 825.764103 91.897436 641.969231 91.897436 420.102564v-13.128205-6.564103C91.897436 382.030769 106.338462 367.589744 124.717949 367.589744S157.538462 382.030769 157.538462 400.410256V420.102564c0 195.610256 158.851282 354.461538 354.461538 354.461539s354.461538-158.851282 354.461538-354.461539v-13.128205-6.564103c0-18.379487 14.441026-32.820513 32.820513-32.820512s32.820513 14.441026 32.820513 32.820512V420.102564zM512 708.923077c-160.164103 0-288.820513-128.65641-288.820513-288.820513V288.820513C223.179487 128.65641 351.835897 0 512 0s288.820513 128.65641 288.820513 288.820513v131.282051c0 160.164103-128.65641 288.820513-288.820513 288.820513z m223.179487-420.102564c0-123.405128-99.774359-223.179487-223.179487-223.179487s-223.179487 99.774359-223.179487 223.179487v131.282051c0 123.405128 99.774359 223.179487 223.179487 223.179487s223.179487-99.774359 223.179487-223.179487V288.820513z"
+            fill="#3C2DCB"
+            p-id="1397"
+          ></path>
+          <path
+            d="M551.384615 838.892308V958.358974h98.461539c18.379487 0 32.820513 14.441026 32.820513 32.820513S668.225641 1024 649.846154 1024h-275.692308c-18.379487 0-32.820513-14.441026-32.820513-32.820513s14.441026-32.820513 32.820513-32.820513H485.74359v-119.466666h65.641025z"
+            fill="#D098FF"
+            p-id="1398"
+          ></path>
+        </svg>
+        <svg
+          t="1729797571771"
+          class="icon"
+          viewBox="0 0 1024 1024"
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          p-id="1395"
+          width="32"
+          height="32"
+          id="MicrophoneListen"
+        >
+          <path
+            d="M393.846154 301.948718m-301.948718 0a301.948718 301.948718 0 1 0 603.897436 0 301.948718 301.948718 0 1 0-603.897436 0Z"
+            fill="#f9ba1c"
+            p-id="1396"
+            data-spm-anchor-id="a313x.collections_detail.0.i0.3df33a81mpSI4F"
+            class=""
+          ></path>
+          <path
+            d="M932.102564 420.102564c0 216.615385-165.415385 397.784615-380.717949 418.789744l-65.641025 1.31282C263.876923 825.764103 91.897436 641.969231 91.897436 420.102564v-13.128205-6.564103C91.897436 382.030769 106.338462 367.589744 124.717949 367.589744S157.538462 382.030769 157.538462 400.410256V420.102564c0 195.610256 158.851282 354.461538 354.461538 354.461539s354.461538-158.851282 354.461538-354.461539v-13.128205-6.564103c0-18.379487 14.441026-32.820513 32.820513-32.820512s32.820513 14.441026 32.820513 32.820512V420.102564zM512 708.923077c-160.164103 0-288.820513-128.65641-288.820513-288.820513V288.820513C223.179487 128.65641 351.835897 0 512 0s288.820513 128.65641 288.820513 288.820513v131.282051c0 160.164103-128.65641 288.820513-288.820513 288.820513z m223.179487-420.102564c0-123.405128-99.774359-223.179487-223.179487-223.179487s-223.179487 99.774359-223.179487 223.179487v131.282051c0 123.405128 99.774359 223.179487 223.179487 223.179487s223.179487-99.774359 223.179487-223.179487V288.820513z"
+            fill="#f95945"
+            p-id="1397"
+            data-spm-anchor-id="a313x.collections_detail.0.i1.3df33a81mpSI4F"
+            class=""
+          ></path>
+          <path
+            d="M551.384615 838.892308V958.358974h98.461539c18.379487 0 32.820513 14.441026 32.820513 32.820513S668.225641 1024 649.846154 1024h-275.692308c-18.379487 0-32.820513-14.441026-32.820513-32.820513s14.441026-32.820513 32.820513-32.820513H485.74359v-119.466666h65.641025z"
+            fill="#f94585"
+            p-id="1398"
+            data-spm-anchor-id="a313x.collections_detail.0.i6.3df33a81mpSI4F"
+            class=""
+          ></path>
+        </svg>
+      </div>
+    </div>
+  </body>
+  <script src="https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@1.3.24102001/src/recorder-core.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@1.3.24102001/src/engine/mp3.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/xiangyuecn/Recorder@1.3.24102001/src/engine/mp3-engine.js"></script>
+  <script>
+    var recordButton = document.getElementById("recordButton");
+    navigator.getUserMedia =
+      navigator.getUserMedia || navigator.webkitGetUserMedia;
+    var ws = null;
+    var record = null;
+    var timeInte = null;
+    var isRecording = false;
+
+    var transcriptionList = [];
+
+    recordButton.onclick = function () {
+      if (!isRecording) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    };
+
+    function renderTranscrionResult(transcriptionList) {
+      const fragment = document.createDocumentFragment();
+      transcriptionList.forEach((transcription) => {
+        const root = document.createElement("div");
+        if (transcription.is_final) {
+          const idEle = document.createElement("div");
+          idEle.appendChild(document.createTextNode(transcription.id));
+          idEle.classList.add("transId");
+          root.appendChild(idEle);
+
+          const transContentEle = document.createElement("div");
+          transContentEle.appendChild(
+            document.createTextNode(transcription.data.raw_text)
+          );
+          transContentEle.classList.add("transContent");
+          root.appendChild(transContentEle);
+
+          const timeEle = document.createElement("div");
+          timeEle.appendChild(
+            document.createTextNode(
+              `${transcription.begin_at} ~ ${transcription.end_at}`
+            )
+          );
+          timeEle.classList.add("transTime");
+          root.appendChild(timeEle);
+        } else {
+          const idEle = document.createElement("div");
+          idEle.appendChild(document.createTextNode(transcription.id));
+          idEle.classList.add("transId");
+          root.appendChild(idEle);
+
+          const transContentEle = document.createElement("div");
+          transContentEle.appendChild(
+            document.createTextNode(transcription.data.raw_text)
+          );
+          transContentEle.classList.add("transContent");
+          root.appendChild(transContentEle);
+
+          const timeEle = document.createElement("div");
+          timeEle.appendChild(
+            document.createTextNode(`${transcription.begin_at} ~ Now`)
+          );
+          timeEle.classList.add("transTime");
+          root.appendChild(timeEle);
+
+          root.classList.add("isActive");
+        }
+        fragment.appendChild(root);
+      });
+      document.getElementById("transcriptionResult").innerHTML = "";
+      document.getElementById("transcriptionResult").appendChild(fragment);
+    }
+
+    function renderVADEvent(is_active) {
+      document.getElementById("MicrophoneWait").style.display = is_active
+        ? "none"
+        : "block";
+      document.getElementById("MicrophoneListen").style.display = is_active
+        ? "block"
+        : "none";
+    }
+    renderVADEvent(false);
+
+    function startRecording() {
+      console.log("Start Recording");
+      transcriptionList = [];
+      document.getElementById("transcriptionResult").innerHTML = "";
+
+      // Construct the query parameters
+      var queryParams = [];
+      var queryString =
+        queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+
+      ws = new WebSocket(
+        `ws://${window.location.host}/api/realtime/ws${queryString}`
+      );
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = function (event) {
+        console.log("WebSocket connection established");
+        recStart("mp3");
+      };
+
+      ws.onmessage = function (evt) {
+        console.log("Received message: " + evt.data);
+        try {
+          resJson = JSON.parse(evt.data);
+          switch (resJson["type"]) {
+            case "TranscriptionResponse":
+              if (transcriptionList.length <= resJson["id"]) {
+                transcriptionList.push(resJson);
+              } else {
+                transcriptionList[resJson["id"]] = resJson;
+              }
+              renderTranscrionResult(transcriptionList);
+              break;
+            case "VADEvent":
+              renderVADEvent(resJson["is_active"]);
+              break;
+            default:
+              transcriptionResult.textContent += "\n" + evt.data;
+          }
+        } catch (e) {
+          console.error("Failed to parse response data", e);
+          transcriptionResult.textContent += "\n" + evt.data;
+        }
+      };
+
+      ws.onclose = function () {
+        console.log("WebSocket connection closed");
+        recStop();
+      };
+
+      ws.onerror = function (error) {
+        console.error("WebSocket error: " + error);
+        stopRecording();
+      };
+
+      recordButton.textContent = "Stop Recording";
+      recordButton.classList.add("recording");
+      isRecording = true;
+    }
+
+    function stopRecording() {
+      console.log("Stop Recording");
+      if (ws) {
+        ws.close();
+      }
+      recordButton.textContent = "Start Recording";
+      recordButton.classList.remove("recording");
+      isRecording = false;
+    }
+
+    /******************
+《【教程】【音频流】【上传】实时转码上传-实时帧回调版》
+作者：高坚果
+时间：2020-5-16 16:58:48
+
+通过Recorder的takeoffEncodeChunk回调选项，可以实时接收到录音转码输出的二进制片段结果（数据帧）；因此可以流式的将数据进行上传，将所有数据帧直接二进制拼接到一起即为一个完整的音频文件；注意：回调的每一帧数据中会包含若干个音频帧，长度不是固定的，取决于音频格式对应的编码器。
+
+本方法早期为mp3专版，现已适用于 mp3、pcm、amr、ogg、g711 等支持实时转码的所有格式，但不支持wav格式（因wav文件头需要整个文件的长度）；amr、ogg第一帧数据开头会带文件头，除ogg格式外其他格式的每一帧数据均可独立解码和播放，ogg需要合并成一个完整文件才能解码。
+
+录音如果不需要获得最终结果，可实时清理缓冲数据（需延迟清理），避免占用过多内存，想录多久就录多久。
+
+本方法和《【教程】【音频流】【上传】实时转码上传-通用转码版》的onProcess+mock实现有本质上的区别，onProcess+mock是实时将pcm片段独立的转成一个音频片段文件，部分格式拼接后的完整文件存在停顿杂音，takeoffEncodeChunk是直接得到音频编码器的实时输出结果，因此不会引入杂音影响到音质；pcm、g711格式无此问题。
+
+【接收端要实时播放?】本示例代码上传过来的数据都是一小段一小段的数据片段文件，除ogg格式外每一段均可独立正常播放，接收端可以进行缓冲，实时的解码成PCM进行播放，解码时应当连续解码（比如使用同一个解码器）否则可能会引入杂音，可以参考《【教程】【音频流】【播放】实时解码播放音频片段》使用BufferStreamPlayer插件来播放。
+******************/
+    var testSampleRate = 16000;
+    var testBitRate = 128;
+
+    //重置环境，每次开始录音时必须先调用此方法，清理环境
+    var RealTimeSendReset = function () {
+      send_frameBuffer = new Uint8Array(0);
+      send_logNumber = 0;
+    };
+    var send_frameBuffer; //提供了SendFrameSize时，将数据缓冲起来按固定大小切分发送
+    var send_logNumber;
+
+    //=====实时处理核心函数==========
+    var RealTimeSendTry = function (chunkBytes, isClose) {
+      if (chunkBytes.length > 0) {
+        var arrayBuffer = chunkBytes.buffer;
+        ws.send(arrayBuffer);
+      }
+    };
+
+    //几个大一点的js，按需加载
+    //调用录音
+    var rec;
+    function recStart(type) {
+      if (rec) {
+        rec.close();
+      }
+
+      var clearBufferIdx = 0,
+        processTime = 0;
+      var rec2 = (rec = Recorder({
+        type: type,
+        sampleRate: testSampleRate,
+        bitRate: testBitRate,
+        onProcess: function (
+          buffers,
+          powerLevel,
+          bufferDuration,
+          bufferSampleRate,
+          newBufferIdx,
+          asyncEnd
+        ) {
+          processTime = Date.now();
+
+          //实时释放清理内存，用于支持长时间录音；在指定了有效的type时，编码器内部可能还会有其他缓冲，必须同时提供takeoffEncodeChunk才能清理内存，否则type需要提供unknown格式来阻止编码器内部缓冲
+          //这里进行了延迟操作（必须要的操作），只清理上次到现在之前的buffer，新的还未推入编码器进行编码需保留
+          //if(this.clearBufferIdx>newBufferIdx){ this.clearBufferIdx=0 } //变量改到this里面时，重新录音了，这样写可以重置this环境
+          for (var i = clearBufferIdx; i < newBufferIdx; i++) {
+            buffers[i] = null;
+          }
+          clearBufferIdx = newBufferIdx;
+        },
+        takeoffEncodeChunk: function (chunkBytes) {
+          //【关键代码】接管实时转码，推入实时处理
+          RealTimeSendTry(chunkBytes, false);
+        },
+      }));
+
+      rec2.open(
+        function () {
+          //打开麦克风授权获得相关资源
+          if (rec2 != rec) return; //sync
+          rec2.start(); //开始录音
+          console.log("已开始录音");
+
+          //【稳如老狗WDT】可选的，监控是否在正常录音有onProcess回调，如果长时间没有回调就代表录音不正常
+          var wdt = (rec.watchDogTimer = setInterval(function () {
+            if (!rec || wdt != rec.watchDogTimer) {
+              clearInterval(wdt);
+              return;
+            } //sync
+            if (Date.now() < rec.wdtPauseT) return; //如果暂停录音了就不检测，此demo没有用到暂停。puase时赋值rec.wdtPauseT=Date.now()*2（永不监控），resume时赋值rec.wdtPauseT=Date.now()+1000（1秒后再监控）
+            if (Date.now() - (processTime || startTime) > 1500) {
+              clearInterval(wdt);
+              alert(processTime ? "录音被中断" : "录音未能正常开始");
+            }
+          }, 1000));
+          var startTime = Date.now();
+          rec.wdtPauseT = 0;
+        },
+        function (msg, isUserNotAllow) {
+          if (rec2 != rec) return; //sync
+          console.log(
+            (isUserNotAllow ? "UserNotAllow，" : "") + "无法录音:" + msg,
+            1
+          );
+        }
+      );
+      RealTimeSendReset(); //重置环境，开始录音时必须调用一次
+    }
+
+    function recStop() {
+      var rec2 = rec;
+      rec = null;
+      if (!rec2) return console.log("未开始录音", 1);
+      rec2.watchDogTimer = 0; //停止监控onProcess超时
+      console.log("正在停止录音...", "#aaa");
+      var stopNext = function () {
+        rec2.close(); //关闭录音
+        console.log("已结束录音", "#aaa");
+        RealTimeSendTry(new Uint8Array(0), true); //最后一次发送
+      };
+
+      //调用stop停止录音，让编码器输出可能存在的最后一段音频数据；stop时编码器不一定有数据输出，因此请勿假设stop后一定存在最后一帧，如果有数据输出，一定会在stop回调前调用takeoffEncodeChunk
+      //注：wav等不支持实时编码的格式无法调用stop，因为onProcess里面清理掉了内存数据
+      rec2.stop(
+        function (blob, duration) {
+          //stop无法得到blob音频数据，因为提供了takeoffEncodeChunk时blob长度为0
+          stopNext();
+        },
+        function (err) {
+          //如果出错，直接不管，只结束录音
+          console.log("不应该出现的stop错误：" + err, 1);
+          stopNext();
+        }
+      );
+    }
+  </script>
+</html>
