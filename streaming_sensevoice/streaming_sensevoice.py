@@ -107,6 +107,14 @@ class StreamingSenseVoice:
         encoder_out, _ = self.model.encoder(speech, speech_lengths)
         return self.model.ctc.log_softmax(encoder_out)[0, 4:]
 
+    def decode(self, times, tokens):
+        times_ms = []
+        for step, token in zip(times, tokens):
+            if len(self.tokenizer.decode(token).strip()) == 0:
+                continue
+            times_ms.append(step * 60)
+        return times_ms, self.tokenizer.decode(tokens)
+
     def streaming_inference(self, audio, is_last):
         self.fbank.accept_waveform(audio, is_last)
         features = self.fbank.get_lfr_frames(
@@ -128,10 +136,8 @@ class StreamingSenseVoice:
                 res = self.decoder.ctc_prefix_beam_search(
                     probs, beam_size=self.beam_size, is_last=is_last
                 )
-                timestamps = [i * 60 for i in res["times"][0]]
-                text = self.tokenizer.decode(res["tokens"][0])
+                times_ms, text = self.decode(res["times"][0], res["tokens"][0])
             else:
                 res = self.decoder.ctc_greedy_search(probs, is_last=is_last)
-                timestamps = [i * 60 for i in res["times"]]
-                text = self.tokenizer.decode(res["tokens"])
-            yield {"timestamps": timestamps, "text": text}
+                times_ms, text = self.decode(res["times"], res["tokens"])
+            yield {"timestamps": times_ms, "text": text}

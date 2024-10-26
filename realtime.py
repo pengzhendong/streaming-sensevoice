@@ -20,7 +20,7 @@ from streaming_sensevoice import StreamingSenseVoice
 
 def main():
     model = StreamingSenseVoice()
-    vad_iterator = VADIterator()
+    vad_iterator = VADIterator(speech_pad_ms=300)
 
     devices = sd.query_devices()
     if len(devices) == 0:
