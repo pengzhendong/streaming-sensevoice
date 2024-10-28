@@ -34,11 +34,31 @@ class StreamingSenseVoice:
         padding: int = 8,
         beam_size: int = 3,
         contexts: List[str] = None,
+        language: str = "zh",
+        textnorm: bool = False,
         device: str = "cpu",
         model: str = "iic/SenseVoiceSmall",
     ):
+        """
+        Args:
+        language:
+            If not empty, then valid values are: auto, zh, en, ja, ko, yue
+        textnorm:
+            True to enable inverse text normalization; False to disable it.
+        """
         self.device = device
         self.model, kwargs = self.load_model(model=model, device=device)
+        # language query
+        language = self.model.lid_dict[language]
+        language = torch.LongTensor([[language]]).to(self.device)
+        language = self.model.embed(language).repeat(1, 1, 1)
+        # text normalization query
+        textnorm = self.model.textnorm_dict["withitn" if textnorm else "woitn"]
+        textnorm = torch.LongTensor([[textnorm]]).to(self.device)
+        textnorm = self.model.embed(textnorm).repeat(1, 1, 1)
+        # event and emotion query
+        event_emo = self.model.embed(torch.LongTensor([[1, 2]]).to(self.device)).repeat(1, 1, 1)
+        self.query = torch.cat((language, event_emo, textnorm), dim=1)
         # features
         cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
         self.neg_mean, self.inv_stddev = cmvn[0, :], cmvn[1, :]
@@ -89,21 +109,8 @@ class StreamingSenseVoice:
         speech_lengths = torch.tensor([speech.shape[1]])
         speech = speech.to(self.device)
         speech_lengths = speech_lengths.to(self.device)
-
-        textnorm_query = self.model.embed(
-            torch.LongTensor([[self.model.textnorm_dict["woitn"]]]).to(self.device)
-        ).repeat(speech.size(0), 1, 1)
-        language_query = self.model.embed(
-            torch.LongTensor([[self.model.lid_dict["zh"]]]).to(self.device)
-        ).repeat(speech.size(0), 1, 1)
-        event_emo_query = self.model.embed(
-            torch.LongTensor([[1, 2]]).to(self.device)
-        ).repeat(speech.size(0), 1, 1)
-        speech = torch.cat(
-            (language_query, event_emo_query, textnorm_query, speech), dim=1
-        )
+        speech = torch.cat((self.query, speech), dim=1)
         speech_lengths += 4
-
         encoder_out, _ = self.model.encoder(speech, speech_lengths)
         return self.model.ctc.log_softmax(encoder_out)[0, 4:]
 
