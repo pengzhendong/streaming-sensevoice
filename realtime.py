@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import sounddevice as sd
+import soundfile as sf
 from pysilero import VADIterator
 
 from streaming_sensevoice import StreamingSenseVoice
@@ -38,7 +39,8 @@ def main():
                 if "start" in speech_dict:
                     model.reset()
                 is_last = "end" in speech_dict
-                for res in model.streaming_inference(speech_samples, is_last):
+                for res in model.streaming_inference(speech_samples * 32768, is_last):
+                    sf.write("test.wav", vad_iterator.speech_samples, 16000)
                     print(res["timestamps"])
                     print(res["text"])
 

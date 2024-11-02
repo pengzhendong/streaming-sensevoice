@@ -57,7 +57,9 @@ class StreamingSenseVoice:
         textnorm = torch.LongTensor([[textnorm]]).to(self.device)
         textnorm = self.model.embed(textnorm).repeat(1, 1, 1)
         # event and emotion query
-        event_emo = self.model.embed(torch.LongTensor([[1, 2]]).to(self.device)).repeat(1, 1, 1)
+        event_emo = self.model.embed(torch.LongTensor([[1, 2]]).to(self.device)).repeat(
+            1, 1, 1
+        )
         self.query = torch.cat((language, event_emo, textnorm), dim=1)
         # features
         cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
