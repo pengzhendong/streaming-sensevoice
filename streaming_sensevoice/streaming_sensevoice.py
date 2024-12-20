@@ -76,7 +76,7 @@ class StreamingSenseVoice:
             self.decoder = CTCDecoder(contexts, symbol_table, bpe_model)
         else:
             self.beam_size = 1
-            self.decoder = CTCDecoder(symbol_table=symbol_table, bpe_model=bpe_model)
+            self.decoder = CTCDecoder()
 
         self.chunk_size = chunk_size
         self.padding = padding
