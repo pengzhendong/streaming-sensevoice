@@ -5,3 +5,8 @@ pysilero
 sounddevice
 soundfile
 torch<=2.3
+torchaudio
+pydub
+onnx
+onnxconverter_common
+numpy==1.26.3
