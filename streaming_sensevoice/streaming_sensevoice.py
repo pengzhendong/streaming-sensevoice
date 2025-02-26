@@ -129,7 +129,8 @@ class StreamingSenseVoice:
         features = self.fbank.get_lfr_frames(
             neg_mean=self.neg_mean, inv_stddev=self.inv_stddev
         )
-        for feature in torch.unbind(torch.tensor(features), dim=0):
+        for idx, feature in enumerate(torch.unbind(torch.tensor(features), dim=0)):
+            is_last = is_last and idx == features.shape[0]
             self.caches = torch.roll(self.caches, -1, dims=0)
             self.caches[-1, :] = feature
             self.cur_idx += 1
