@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partial
 from typing import List
 
 import torch
 from asr_decoder import CTCDecoder
-from funasr import AutoModel
 from funasr.frontends.wav_frontend import load_cmvn
 from online_fbank import OnlineFbank
 import numpy as np
@@ -31,7 +29,7 @@ sensevoice_models = {}
 class StreamingSenseVoice:
     def __init__(
         self,
-        chunk_size: int = 10,
+        chunk_size: int = 4,
         padding: int = 8,
         beam_size: int = 3,
         contexts: List[str] = None,
@@ -39,6 +37,7 @@ class StreamingSenseVoice:
         textnorm: bool = False,
         device: str = "cpu",
         model: str = "iic/SenseVoiceSmall",
+        max_history: int = 0,
     ):
         """
         Args:
@@ -46,6 +45,11 @@ class StreamingSenseVoice:
             If not empty, then valid values are: auto, zh, en, ja, ko, yue
         textnorm:
             True to enable inverse text normalization; False to disable it.
+        max_history:
+            Max number of feature frames to retain for encoder context.
+            0 (default) means unlimited — the encoder sees all past frames
+            with full bidirectional attention, matching the training regime.
+            Set to a positive value to bound memory/computation for long audio.
         """
         self.device = device
         self.model, kwargs = self.load_model(model=model, device=device)
@@ -63,6 +67,7 @@ class StreamingSenseVoice:
         )
         self.query = torch.cat((language, event_emo, textnorm), dim=1)
         # features
+        self.input_size = kwargs["input_size"]
         cmvn = load_cmvn(kwargs["frontend_conf"]["cmvn_file"]).numpy()
         self.neg_mean, self.inv_stddev = cmvn[0, :], cmvn[1, :]
         self.fbank = OnlineFbank(window_type="hamming")
@@ -80,11 +85,10 @@ class StreamingSenseVoice:
             self.decoder = CTCDecoder()
 
         self.chunk_size = chunk_size
-        self.padding = padding
-        self.cur_idx = -1
-        self.caches_shape = (chunk_size + 2 * padding, kwargs["input_size"])
-        self.caches = torch.zeros(self.caches_shape)
-        self.zeros = np.zeros((1, kwargs["input_size"]), dtype=float)
+        self.max_history = max_history
+        self.zeros = np.zeros((1, self.input_size), dtype=float)
+        self.feature_buffer = []
+        self._last_decoded_frames = 0
 
     @staticmethod
     def load_model(model: str, device: str) -> tuple:
@@ -97,26 +101,10 @@ class StreamingSenseVoice:
         return sensevoice_models[key]
 
     def reset(self):
-        self.cur_idx = -1
         self.decoder.reset()
         self.fbank = OnlineFbank(window_type="hamming")
-        self.caches = torch.zeros(self.caches_shape)
-
-    def get_size(self):
-        effective_size = self.cur_idx + 1 - self.padding
-        if effective_size <= 0:
-            return 0
-        return effective_size % self.chunk_size or self.chunk_size
-
-    def inference(self, speech):
-        speech = speech[None, :, :]
-        speech_lengths = torch.tensor([speech.shape[1]])
-        speech = speech.to(self.device)
-        speech_lengths = speech_lengths.to(self.device)
-        speech = torch.cat((self.query, speech), dim=1)
-        speech_lengths += 4
-        encoder_out, _ = self.model.encoder(speech, speech_lengths)
-        return self.model.ctc.log_softmax(encoder_out)[0, 4:]
+        self.feature_buffer = []
+        self._last_decoded_frames = 0
 
     def decode(self, times, tokens):
         times_ms = []
@@ -126,6 +114,13 @@ class StreamingSenseVoice:
             times_ms.append(step * 60)
         return times_ms, self.tokenizer.decode(tokens)
 
+    def _run_encoder(self, frames_tensor):
+        speech = frames_tensor.unsqueeze(0).to(self.device)
+        speech = torch.cat((self.query, speech), dim=1)
+        speech_lengths = torch.tensor([speech.shape[1]], device=self.device)
+        encoder_out, _ = self.model.encoder(speech, speech_lengths)
+        return self.model.ctc.log_softmax(encoder_out)[0, 4:]
+
     def streaming_inference(self, audio, is_last):
         self.fbank.accept_waveform(audio, is_last)
         features = self.fbank.get_lfr_frames(
@@ -133,25 +128,38 @@ class StreamingSenseVoice:
         )
         if is_last and len(features) == 0:
             features = self.zeros
-        for idx, feature in enumerate(torch.unbind(torch.tensor(features), dim=0)):
-            is_last = is_last and idx == features.shape[0] - 1
-            self.caches = torch.roll(self.caches, -1, dims=0)
-            self.caches[-1, :] = feature
-            self.cur_idx += 1
-            cur_size = self.get_size()
-            if cur_size != self.chunk_size and not is_last:
-                continue
-            probs = self.inference(self.caches)[self.padding :]
-            if cur_size != self.chunk_size:
-                probs = probs[self.chunk_size - cur_size :]
-            if not is_last:
-                probs = probs[: self.chunk_size]
-            if self.beam_size > 1:
-                res = self.decoder.ctc_prefix_beam_search(
-                    probs, beam_size=self.beam_size, is_last=is_last
-                )
-                times_ms, text = self.decode(res["times"][0], res["tokens"][0])
-            else:
-                res = self.decoder.ctc_greedy_search(probs, is_last=is_last)
-                times_ms, text = self.decode(res["times"], res["tokens"])
-            yield {"timestamps": times_ms, "text": text}
+
+        self.feature_buffer.extend(
+            torch.unbind(torch.tensor(features, dtype=torch.float32), dim=0)
+        )
+
+        # Trim history to bound computation
+        if self.max_history > 0 and len(self.feature_buffer) > self.max_history:
+            trim = len(self.feature_buffer) - self.max_history
+            self.feature_buffer = self.feature_buffer[-self.max_history :]
+            self._last_decoded_frames = max(0, self._last_decoded_frames - trim)
+
+        # Only yield when enough new frames have arrived (or is_last)
+        new_frames = len(self.feature_buffer) - self._last_decoded_frames
+        if new_frames < self.chunk_size and not is_last:
+            return
+
+        self._last_decoded_frames = len(self.feature_buffer)
+
+        # Run encoder on all accumulated features with full bidirectional attention
+        frames_tensor = torch.stack(self.feature_buffer)
+        probs = self._run_encoder(frames_tensor)
+
+        # Decode from scratch — the encoder has full context, so re-decoding
+        # gives the best result. The CTC decoder is lightweight.
+        self.decoder.reset()
+        if self.beam_size > 1:
+            res = self.decoder.ctc_prefix_beam_search(
+                probs, beam_size=self.beam_size, is_last=is_last
+            )
+            times_ms, text = self.decode(res["times"][0], res["tokens"][0])
+        else:
+            res = self.decoder.ctc_greedy_search(probs, is_last=is_last)
+            times_ms, text = self.decode(res["times"], res["tokens"])
+
+        yield {"timestamps": times_ms, "text": text}
