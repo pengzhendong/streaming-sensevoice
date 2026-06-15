@@ -89,6 +89,18 @@ class StreamingSenseVoice:
         self.zeros = np.zeros((1, self.input_size), dtype=float)
         self.feature_buffer = []
         self._last_decoded_frames = 0
+        # Rich label reverse mappings (SenseVoice outputs emotion/language/event
+        # in the first 4 CTC positions)
+        self.lang_map = {v: k for k, v in self.model.lid_int_dict.items()}
+        # lid_int_dict maps token IDs (24884, etc.) to internal IDs (3, 4, etc.)
+        # lid_dict maps names to internal IDs. Build a reverse from token ID to name.
+        _id_to_name = {v: k for k, v in self.model.lid_dict.items()}
+        _id_to_name[0] = "auto"
+        self.lang_map = {
+            token_id: _id_to_name.get(internal_id, "unknown")
+            for token_id, internal_id in self.model.lid_int_dict.items()
+        }
+        self.emo_map = {v: k for k, v in self.model.emo_dict.items()}
 
     @staticmethod
     def load_model(model: str, device: str) -> tuple:
@@ -119,7 +131,10 @@ class StreamingSenseVoice:
         speech = torch.cat((self.query, speech), dim=1)
         speech_lengths = torch.tensor([speech.shape[1]], device=self.device)
         encoder_out, _ = self.model.encoder(speech, speech_lengths)
-        return self.model.ctc.log_softmax(encoder_out)[0, 4:]
+        log_probs = self.model.ctc.log_softmax(encoder_out)[0]
+        # First 4 positions carry rich labels: language, emotion, event, textnorm
+        rich_tokens = log_probs[:4].argmax(dim=-1).tolist()
+        return log_probs[4:], rich_tokens
 
     def streaming_inference(self, audio, is_last):
         self.fbank.accept_waveform(audio, is_last)
@@ -148,7 +163,7 @@ class StreamingSenseVoice:
 
         # Run encoder on all accumulated features with full bidirectional attention
         frames_tensor = torch.stack(self.feature_buffer)
-        probs = self._run_encoder(frames_tensor)
+        probs, rich_tokens = self._run_encoder(frames_tensor)
 
         # Decode from scratch — the encoder has full context, so re-decoding
         # gives the best result. The CTC decoder is lightweight.
@@ -162,4 +177,11 @@ class StreamingSenseVoice:
             res = self.decoder.ctc_greedy_search(probs, is_last=is_last)
             times_ms, text = self.decode(res["times"], res["tokens"])
 
-        yield {"timestamps": times_ms, "text": text}
+        rich = {}
+        lang_id = rich_tokens[0]
+        if lang_id in self.lang_map:
+            rich["language"] = self.lang_map[lang_id]
+        emo_id = rich_tokens[1]
+        if emo_id in self.emo_map:
+            rich["emotion"] = self.emo_map[emo_id]
+        yield {"timestamps": times_ms, "text": text, "rich": rich}
