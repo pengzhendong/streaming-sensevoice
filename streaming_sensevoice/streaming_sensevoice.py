@@ -89,6 +89,7 @@ class StreamingSenseVoice:
         self.zeros = np.zeros((1, self.input_size), dtype=float)
         self.feature_buffer = []
         self._last_decoded_frames = 0
+        self._last_text = ""
         # Rich label reverse mappings (SenseVoice outputs emotion/language/event
         # in the first 4 CTC positions)
         self.lang_map = {v: k for k, v in self.model.lid_int_dict.items()}
@@ -117,6 +118,7 @@ class StreamingSenseVoice:
         self.fbank = OnlineFbank(window_type="hamming")
         self.feature_buffer = []
         self._last_decoded_frames = 0
+        self._last_text = ""
 
     def decode(self, times, tokens):
         times_ms = []
@@ -185,3 +187,10 @@ class StreamingSenseVoice:
         if emo_id in self.emo_map:
             rich["emotion"] = self.emo_map[emo_id]
         yield {"timestamps": times_ms, "text": text, "rich": rich}
+        self._last_text = text
+
+    def incremental_text(self, text: str) -> str:
+        """Return only the new part of text since the last call."""
+        if text.startswith(self._last_text):
+            return text[len(self._last_text):]
+        return text
