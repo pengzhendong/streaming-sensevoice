@@ -68,6 +68,7 @@ class Config(BaseSettings, cli_parse_args=True, cli_use_class_docs_for_groups=Tr
     VAD_MIN_SILENCE_DURATION_MS: int = Field(
         550, description="VAD min slience duration (ms)"
     )
+    VAD_SPEECH_PAD_MS: int = Field(300, description="VAD speech pad duration (ms)")
     VAD_THRESHOLD: float = Field(0.5, description="VAD threshold")
 
 
@@ -134,6 +135,9 @@ async def websocket_endpoint(websocket: WebSocket):
                 "vad_min_silence_duration_ms", config.VAD_MIN_SILENCE_DURATION_MS
             )
         )
+        vad_speech_pad_ms = int(
+            query_params.get("vad_speech_pad_ms", config.VAD_SPEECH_PAD_MS)
+        )
 
         sensevoice_model = StreamingSenseVoice(
             model=config.SENSEVOICE_MODEL_PATH, device=config.DEVICE
@@ -142,6 +146,7 @@ async def websocket_endpoint(websocket: WebSocket):
             version=config.SILEROVAD_VERSION,
             threshold=vad_threshold,
             min_silence_duration_ms=vad_min_silence_duration_ms,
+            speech_pad_ms=vad_speech_pad_ms,
         )
 
         audio_buffer = np.array([], dtype=np.float32)
