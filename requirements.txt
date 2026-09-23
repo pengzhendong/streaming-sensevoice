@@ -1,7 +1,7 @@
 asr-decoder
 funasr
 online-fbank
-pysilero==0.1.1
+pysilero>=0.1.3
 sounddevice
 soundfile
 torch<=2.3
